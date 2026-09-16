@@ -19,7 +19,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-coin" aria-hidden="true">◉</span>
-      <h1 class="brand-title" data-text="PRIZE ARCADE">PRIZE ARCADE</h1>
+      <h1 class="brand-title" data-text="EASTVALE INNOVATORS SPINNER">EASTVALE INNOVATORS SPINNER</h1>
     </div>
     <div class="topbar-meta">
       <span class="chip" id="chipCount">0 SLOTS</span>
@@ -53,43 +53,130 @@
 
     <!-- CONTROL PANEL -->
     <aside class="panel" aria-label="Prize controls">
-      <div class="panel-head">
-        <h2>PRIZE ROSTER</h2>
-        <div class="panel-tools">
-          <button class="mini-btn" id="shuffleBtn" title="Shuffle order">⤮ SHUFFLE</button>
-          <button class="mini-btn danger" id="clearBtn" title="Remove all">✕ CLEAR</button>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="roster" role="tab">ROSTER</button>
+        <button class="tab" data-tab="modes" role="tab">MODES</button>
+        <button class="tab" data-tab="winners" role="tab">WINNERS <span class="tab-badge" id="winBadge">0</span></button>
+      </nav>
+
+      <!-- ROSTER TAB -->
+      <section class="pane active" data-pane="roster">
+        <div class="panel-head">
+          <div class="panel-tools">
+            <button class="mini-btn" id="importBtn" title="Import from CSV / text">⇪ IMPORT</button>
+            <button class="mini-btn" id="shuffleBtn" title="Shuffle order">⤮ SHUFFLE</button>
+            <button class="mini-btn danger" id="clearBtn" title="Remove all">✕ CLEAR</button>
+          </div>
         </div>
-      </div>
 
-      <label class="weight-toggle">
-        <input type="checkbox" id="weightToggle" />
-        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        <span class="toggle-text">WEIGHTED ODDS</span>
-        <span class="toggle-hint">off = auto even split</span>
-      </label>
+        <label class="weight-toggle">
+          <input type="checkbox" id="weightToggle" />
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-text">WEIGHTED ODDS</span>
+          <span class="toggle-hint">off = auto even split</span>
+        </label>
 
-      <div class="entries" id="entries" role="list"></div>
+        <div class="entries" id="entries" role="list"></div>
 
-      <form class="add-row" id="addForm" autocomplete="off">
-        <input type="text" id="addInput" maxlength="42" placeholder="Add a prize…" aria-label="New prize name" />
-        <button type="submit" class="add-btn" aria-label="Add prize">＋</button>
-      </form>
+        <form class="add-row" id="addForm" autocomplete="off">
+          <input type="text" id="addInput" maxlength="42" placeholder="Add a prize…" aria-label="New prize name" />
+          <button type="submit" class="add-btn" aria-label="Add prize">＋</button>
+        </form>
+      </section>
 
-      <div class="panel-foot">
-        <button class="ghost-btn" id="soundBtn" aria-pressed="true">🔊 SFX ON</button>
-        <span class="foot-hint">Enter to add · Space to spin</span>
-      </div>
+      <!-- MODES TAB -->
+      <section class="pane" data-pane="modes" hidden>
+        <div class="mode-card">
+          <label class="mode-row">
+            <span class="mode-info"><span class="mode-name">ELIMINATION</span><span class="mode-desc">Winner is removed after each spin — draw a bracket with no repeats.</span></span>
+            <span class="switch"><input type="checkbox" id="eliminationToggle" /><span class="switch-track"><span class="switch-thumb"></span></span></span>
+          </label>
+          <label class="mode-row">
+            <span class="mode-info"><span class="mode-name">MYSTERY</span><span class="mode-desc">Hide the labels — slices stay blank until the wheel reveals the winner.</span></span>
+            <span class="switch"><input type="checkbox" id="mysteryToggle" /><span class="switch-track"><span class="switch-thumb"></span></span></span>
+          </label>
+          <label class="mode-row">
+            <span class="mode-info"><span class="mode-name">AUTO-SPIN</span><span class="mode-desc">Instantly re-spin a few seconds after each result.</span></span>
+            <span class="switch"><input type="checkbox" id="autospinToggle" /><span class="switch-track"><span class="switch-thumb"></span></span></span>
+          </label>
+        </div>
+
+        <div class="mode-card">
+          <div class="mode-block-label">SPIN SPEED</div>
+          <div class="segmented" id="speedSeg" role="group" aria-label="Spin speed">
+            <button data-speed="quick">QUICK</button>
+            <button data-speed="normal" class="active">NORMAL</button>
+            <button data-speed="suspense">SUSPENSE</button>
+          </div>
+        </div>
+
+        <div class="mode-card">
+          <div class="mode-block-label">MULTI-DRAW</div>
+          <div class="stepper-row">
+            <span class="mode-desc">Draw several unique winners in one go.</span>
+            <div class="stepper">
+              <button id="drawMinus" aria-label="Fewer">−</button>
+              <span id="drawCount">1</span>
+              <button id="drawPlus" aria-label="More">＋</button>
+            </div>
+          </div>
+          <button class="wide-btn" id="drawManyBtn">DRAW <span id="drawBtnN">1</span> WINNER</button>
+        </div>
+
+        <label class="weight-toggle" style="margin-top:auto">
+          <input type="checkbox" id="soundToggle" checked />
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-text">SOUND FX</span>
+          <span class="toggle-hint">ticks · fanfare</span>
+        </label>
+      </section>
+
+      <!-- WINNERS TAB -->
+      <section class="pane" data-pane="winners" hidden>
+        <div class="panel-head">
+          <div class="panel-tools">
+            <button class="mini-btn" id="exportWinnersBtn" title="Download CSV">⭳ EXPORT CSV</button>
+            <button class="mini-btn danger" id="clearWinnersBtn" title="Clear history">✕ CLEAR</button>
+          </div>
+        </div>
+        <div class="winners-list" id="winnersList"></div>
+      </section>
     </aside>
   </main>
+
+  <!-- IMPORT MODAL -->
+  <div class="modal" id="importModal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-card import-card">
+      <div class="import-head">
+        <h3>IMPORT PRIZES</h3>
+        <button class="del-btn" id="importClose" aria-label="Close">×</button>
+      </div>
+      <p class="import-hint">One prize per line. Optional weight after a comma: <code>Golden Ticket, 5</code></p>
+      <textarea id="importText" placeholder="Grand Prize, 1&#10;Runner Up, 3&#10;Consolation, 6"></textarea>
+      <div class="import-file">
+        <label class="file-btn">⇪ CHOOSE .CSV / .TXT<input type="file" id="importFile" accept=".csv,.txt,text/csv,text/plain" hidden /></label>
+        <span class="import-count" id="importCount"></span>
+      </div>
+      <div class="import-opts">
+        <label><input type="radio" name="importMode" value="replace" checked /> Replace roster</label>
+        <label><input type="radio" name="importMode" value="append" /> Add to roster</label>
+      </div>
+      <div class="modal-actions">
+        <button class="neon-btn" id="importConfirm">IMPORT</button>
+        <button class="neon-btn ghost" id="importCancel">CANCEL</button>
+      </div>
+    </div>
+  </div>
 
   <!-- WINNER MODAL -->
   <div class="modal" id="winModal" role="dialog" aria-modal="true" aria-hidden="true">
     <canvas class="confetti" id="confetti"></canvas>
     <div class="modal-card">
       <div class="modal-crown">🏆</div>
-      <div class="modal-label">WINNER</div>
+      <div class="modal-label" id="modalLabel">WINNER</div>
       <div class="modal-prize" id="modalPrize">—</div>
-      <div class="modal-actions">
+      <ul class="modal-list" id="modalList" hidden></ul>
+      <div class="modal-actions" id="modalActions">
         <button class="neon-btn" id="againBtn">SPIN AGAIN</button>
         <button class="neon-btn ghost" id="removeWinnerBtn">REMOVE &amp; SPIN</button>
         <button class="neon-btn ghost" id="closeModalBtn">CLOSE</button>

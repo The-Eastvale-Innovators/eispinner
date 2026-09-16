@@ -1,5 +1,5 @@
 /* ============================================================
-   PRIZE ARCADE — spinner engine
+   EASTVALE INNOVATORS SPINNER — engine
    ============================================================ */
 (() => {
   "use strict";
@@ -7,8 +7,8 @@
   const TAU = Math.PI * 2;
   const POINTER_ANGLE = -Math.PI / 2; // top of the wheel (12 o'clock)
   const STORE_KEY = "prize-arcade-v1";
+  const SPEEDS = { quick: [2400, 600], normal: [5200, 900], suspense: [8200, 1300] };
 
-  // Curated arcade palette — vivid, high separation.
   const PALETTE = [
     "#ff3ea5", "#22e1ff", "#ffe14d", "#4dffb8", "#a45cff",
     "#ff8a3d", "#3d9bff", "#ff5c7c", "#7cff5c", "#ff4de1",
@@ -17,40 +17,79 @@
 
   // ---- State ----
   let entries = [];
+  let winners = [];
   let weighted = false;
-  let soundOn = true;
-  let rotation = 0;          // current wheel rotation (radians)
+  let sound = true;
+  let elimination = false;
+  let mystery = false;
+  let autospin = false;
+  let speed = "normal";
+  let drawCount = 1;
+
+  let rotation = 0;
   let spinning = false;
+  let locked = false;          // blocks input during multi-draw
+  let autospinTimer = null;
   let lastTickSegment = -1;
 
   // ---- DOM ----
-  const canvas = document.getElementById("wheel");
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("wheel");
   const ctx = canvas.getContext("2d");
-  const wheelHolder = document.getElementById("wheelHolder");
-  const spinBtn = document.getElementById("spinBtn");
-  const hubLabel = document.getElementById("hubLabel");
-  const pointer = document.getElementById("pointer");
-  const entriesEl = document.getElementById("entries");
-  const addForm = document.getElementById("addForm");
-  const addInput = document.getElementById("addInput");
-  const weightToggle = document.getElementById("weightToggle");
-  const shuffleBtn = document.getElementById("shuffleBtn");
-  const clearBtn = document.getElementById("clearBtn");
-  const soundBtn = document.getElementById("soundBtn");
-  const resultValue = document.getElementById("resultValue");
-  const chipCount = document.getElementById("chipCount");
-  const chipMode = document.getElementById("chipMode");
-  const winModal = document.getElementById("winModal");
-  const modalPrize = document.getElementById("modalPrize");
-  const againBtn = document.getElementById("againBtn");
-  const removeWinnerBtn = document.getElementById("removeWinnerBtn");
-  const closeModalBtn = document.getElementById("closeModalBtn");
+  const wheelHolder = $("wheelHolder");
+  const spinBtn = $("spinBtn");
+  const hubLabel = $("hubLabel");
+  const pointer = $("pointer");
+  const entriesEl = $("entries");
+  const addForm = $("addForm");
+  const addInput = $("addInput");
+  const weightToggle = $("weightToggle");
+  const shuffleBtn = $("shuffleBtn");
+  const clearBtn = $("clearBtn");
+  const importBtn = $("importBtn");
+  const resultValue = $("resultValue");
+  const chipCount = $("chipCount");
+  const chipMode = $("chipMode");
+
+  const eliminationToggle = $("eliminationToggle");
+  const mysteryToggle = $("mysteryToggle");
+  const autospinToggle = $("autospinToggle");
+  const soundToggle = $("soundToggle");
+  const speedSeg = $("speedSeg");
+  const drawMinus = $("drawMinus");
+  const drawPlus = $("drawPlus");
+  const drawCountEl = $("drawCount");
+  const drawBtnN = $("drawBtnN");
+  const drawManyBtn = $("drawManyBtn");
+
+  const winnersList = $("winnersList");
+  const winBadge = $("winBadge");
+  const exportWinnersBtn = $("exportWinnersBtn");
+  const clearWinnersBtn = $("clearWinnersBtn");
+
+  const winModal = $("winModal");
+  const modalLabel = $("modalLabel");
+  const modalPrize = $("modalPrize");
+  const modalList = $("modalList");
+  const modalActions = $("modalActions");
+  const againBtn = $("againBtn");
+  const removeWinnerBtn = $("removeWinnerBtn");
+  const closeModalBtn = $("closeModalBtn");
+
+  const importModal = $("importModal");
+  const importText = $("importText");
+  const importFile = $("importFile");
+  const importCount = $("importCount");
+  const importConfirm = $("importConfirm");
+  const importCancel = $("importCancel");
+  const importClose = $("importClose");
 
   // ---- Utils ----
   const uid = () => Math.random().toString(36).slice(2, 9);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const norm = (a) => ((a % TAU) + TAU) % TAU;
   const easeOut = (t) => 1 - Math.pow(1 - t, 3.4);
+  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
   function pickColor() {
     const used = new Set(entries.map((e) => e.color));
@@ -61,27 +100,32 @@
   // ---- Persistence ----
   function save() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ entries, weighted, soundOn }));
-    } catch (_) { /* ignore quota / privacy mode */ }
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        entries, winners, weighted, sound, elimination, mystery, autospin, speed, drawCount,
+      }));
+    } catch (_) { /* ignore */ }
   }
   function load() {
     try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const d = JSON.parse(raw);
-        entries = Array.isArray(d.entries) ? d.entries : [];
-        weighted = !!d.weighted;
-        soundOn = d.soundOn !== false;
-        return true;
-      }
-    } catch (_) { /* fall through to seed */ }
-    return false;
+      const d = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+      if (!d) return false;
+      entries = Array.isArray(d.entries) ? d.entries : [];
+      winners = Array.isArray(d.winners) ? d.winners : [];
+      weighted = !!d.weighted;
+      sound = d.sound !== false;
+      elimination = !!d.elimination;
+      mystery = !!d.mystery;
+      autospin = !!d.autospin;
+      speed = SPEEDS[d.speed] ? d.speed : "normal";
+      drawCount = clamp(parseInt(d.drawCount) || 1, 1, 20);
+      return true;
+    } catch (_) { return false; }
   }
 
   // ---- Sound ----
   let audioCtx = null;
   function audio() {
-    if (!soundOn) return null;
+    if (!sound) return null;
     if (!audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
@@ -103,7 +147,7 @@
     osc.start();
     osc.stop(ac.currentTime + dur);
   }
-  function tickSound() { blip(880 + Math.random() * 120, 0.04, "square", 0.035); }
+  function tickSound() { blip(880 + Math.random() * 120, 0.04, "square", 0.03); }
   function winSound() {
     const notes = [523, 659, 784, 1046, 1318];
     notes.forEach((f, i) => setTimeout(() => blip(f, 0.18, "triangle", 0.07), i * 90));
@@ -114,8 +158,7 @@
     return entries.reduce((s, e) => s + (weighted ? Math.max(0.0001, e.weight) : 1), 0);
   }
   function segAngle(e) {
-    const w = weighted ? Math.max(0.0001, e.weight) : 1;
-    return (w / totalWeight()) * TAU;
+    return ((weighted ? Math.max(0.0001, e.weight) : 1) / totalWeight()) * TAU;
   }
 
   // ---- Wheel rendering ----
@@ -123,7 +166,7 @@
 
   function resizeCanvas() {
     dpr = Math.max(1, window.devicePixelRatio || 1);
-    const size = wheelHolder.clientWidth - 28; // minus padding
+    const size = wheelHolder.clientWidth - 28;
     canvas.width = Math.round(size * dpr);
     canvas.height = Math.round(size * dpr);
     drawWheel();
@@ -135,14 +178,12 @@
     ctx.clearRect(0, 0, w, h);
 
     if (entries.length === 0) {
-      ctx.save();
       ctx.fillStyle = "#0b0920";
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
       ctx.fillStyle = "#4a5488";
       ctx.font = `${Math.round(r * 0.09)}px Orbitron, sans-serif`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText("ADD PRIZES", cx, cy);
-      ctx.restore();
       return;
     }
 
@@ -157,7 +198,6 @@
       const span = segAngle(e);
       const a0 = a, a1 = a + span;
 
-      // Slice with subtle radial shading
       const grad = ctx.createRadialGradient(0, 0, r * 0.12, 0, 0, r);
       grad.addColorStop(0, shade(e.color, 0.22));
       grad.addColorStop(1, e.color);
@@ -168,17 +208,14 @@
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Divider
       ctx.strokeStyle = "rgba(0,0,0,0.28)";
       ctx.lineWidth = Math.max(1, r * 0.006);
       ctx.stroke();
 
-      // Label
-      drawLabel(e.name, a0 + span / 2, r, span, n);
+      drawLabel(mystery ? "?" : e.name, a0 + span / 2, r, span);
       a = a1;
     }
 
-    // Inner ring accent
     ctx.beginPath();
     ctx.arc(0, 0, r * 0.995, 0, TAU);
     ctx.strokeStyle = "rgba(255,255,255,0.14)";
@@ -188,26 +225,24 @@
     ctx.restore();
   }
 
-  function drawLabel(text, mid, r, span, n) {
+  function drawLabel(text, mid, r, span) {
     ctx.save();
     ctx.rotate(mid);
-    ctx.textAlign = "right";
+    ctx.textAlign = mystery ? "center" : "right";
     ctx.textBaseline = "middle";
-    // Font scales down with more slots / thinner slices.
     let fs = clamp(r * 0.075, 11 * dpr, r * 0.11);
-    if (span < 0.18) fs *= 0.8;
+    if (mystery) fs = r * 0.12;
+    else if (span < 0.18) fs *= 0.8;
     ctx.font = `700 ${Math.round(fs)}px Rajdhani, sans-serif`;
-    // Truncate very long labels.
     const maxChars = span < 0.25 ? 12 : 20;
-    let label = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
-    ctx.fillStyle = readable(text);
+    const label = mystery ? "?" : (text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text);
+    ctx.fillStyle = "#0a0a1f";
     ctx.shadowColor = "rgba(0,0,0,0.35)";
     ctx.shadowBlur = 3 * dpr;
-    ctx.fillText(label, r * 0.9, 0);
+    ctx.fillText(label, mystery ? r * 0.72 : r * 0.9, 0);
     ctx.restore();
   }
 
-  // Lighten a hex color by amount 0..1 (toward white).
   function shade(hex, amt) {
     const { r, g, b } = hexRGB(hex);
     const mix = (c) => Math.round(c + (255 - c) * amt);
@@ -215,14 +250,8 @@
   }
   function hexRGB(hex) {
     const h = hex.replace("#", "");
-    return {
-      r: parseInt(h.slice(0, 2), 16),
-      g: parseInt(h.slice(2, 4), 16),
-      b: parseInt(h.slice(4, 6), 16),
-    };
+    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
   }
-  // Choose dark or light text for contrast.
-  function readable(refHexForColor) { return "#0a0a1f"; }
 
   // ---- Winner detection ----
   function winnerAt(rot) {
@@ -236,81 +265,201 @@
     return entries.length - 1;
   }
 
-  // ---- Spin ----
-  function spin() {
-    if (spinning || entries.length === 0) return;
-    if (entries.length === 1) { celebrate(0); return; }
+  // ---- Core spin animation (returns winning index) ----
+  function animateSpin() {
+    return new Promise((resolve) => {
+      spinning = true;
+      spinBtn.disabled = true;
+      drawManyBtn.disabled = true;
+      spinBtn.classList.add("spinning");
+      hubLabel.textContent = "···";
+      resultValue.textContent = mystery ? "???" : "spinning…";
+      audio();
 
-    spinning = true;
-    spinBtn.disabled = true;
-    spinBtn.classList.add("spinning");
-    hubLabel.textContent = "···";
-    winModalClose();
+      const start = rotation;
+      const turns = 5 + Math.floor(Math.random() * 4);
+      const target = start + turns * TAU + Math.random() * TAU;
+      const [base, jitter] = SPEEDS[speed];
+      const duration = base + Math.random() * jitter;
+      const startTime = performance.now();
+      lastTickSegment = winnerAt(start);
 
-    audio(); // unlock on gesture
-
-    const start = rotation;
-    const turns = 5 + Math.floor(Math.random() * 4); // 5–8 full turns
-    const extra = Math.random() * TAU;
-    const target = start + turns * TAU + extra;
-    const duration = 5200 + Math.random() * 900;
-    const startTime = performance.now();
-    lastTickSegment = winnerAt(start);
-
-    function frame(now) {
-      const t = clamp((now - startTime) / duration, 0, 1);
-      rotation = start + (target - start) * easeOut(t);
-      drawWheel();
-
-      // Tick + pointer flap when a new slice reaches the pointer.
-      const seg = winnerAt(rotation);
-      if (seg !== lastTickSegment) {
-        lastTickSegment = seg;
-        tickSound();
-        pointer.classList.remove("tick");
-        void pointer.offsetWidth;
-        pointer.classList.add("tick");
-      }
-
-      if (t < 1) {
-        requestAnimationFrame(frame);
-      } else {
-        rotation = norm(target);
+      function frame(now) {
+        const t = clamp((now - startTime) / duration, 0, 1);
+        rotation = start + (target - start) * easeOut(t);
         drawWheel();
-        spinning = false;
-        spinBtn.disabled = false;
-        spinBtn.classList.remove("spinning");
-        hubLabel.textContent = "SPIN";
-        celebrate(winnerAt(rotation));
+
+        const seg = winnerAt(rotation);
+        if (seg !== lastTickSegment) {
+          lastTickSegment = seg;
+          tickSound();
+          pointer.classList.remove("tick");
+          void pointer.offsetWidth;
+          pointer.classList.add("tick");
+        }
+
+        if (t < 1) {
+          requestAnimationFrame(frame);
+        } else {
+          rotation = norm(target);
+          drawWheel();
+          spinning = false;
+          spinBtn.disabled = false;
+          drawManyBtn.disabled = false;
+          spinBtn.classList.remove("spinning");
+          hubLabel.textContent = "SPIN";
+          resolve(winnerAt(rotation));
+        }
       }
-    }
-    requestAnimationFrame(frame);
+      requestAnimationFrame(frame);
+    });
   }
 
-  function celebrate(index) {
-    const e = entries[index];
+  // ---- Single spin ----
+  async function spin() {
+    if (spinning || locked || entries.length === 0) return;
+    clearAutospin();
+    closeWinModal(true);
+    const idx = await animateSpin();
+    const e = entries[idx];
     if (!e) return;
-    resultValue.textContent = e.name;
+    recordWinner(e);
+    showSingleWinner(e);
+    if (elimination) setTimeout(() => removeEntryImmediate(e.id), 480);
+    if (autospin && entries.length > (elimination ? 1 : 0)) scheduleAutospin();
+  }
+
+  function scheduleAutospin() {
+    clearAutospin();
+    autospinTimer = setTimeout(() => { closeWinModal(true); spin(); }, 2600);
+  }
+  function clearAutospin() { if (autospinTimer) { clearTimeout(autospinTimer); autospinTimer = null; } }
+
+  // ---- Multi-draw ----
+  async function drawMany() {
+    if (spinning || locked || entries.length === 0) return;
+    clearAutospin();
+    closeWinModal(true);
+    locked = true;
+    drawManyBtn.disabled = true;
+    const n = Math.min(drawCount, entries.length);
+    const batch = [];
+    for (let i = 0; i < n; i++) {
+      const idx = await animateSpin();
+      const e = entries[idx];
+      if (!e) break;
+      batch.push({ name: e.name, color: e.color });
+      recordWinner(e);
+      flashEntry(e.id);
+      winSound();
+      await delay(650);
+      removeEntryImmediate(e.id);
+      await delay(180);
+    }
+    locked = false;
+    drawManyBtn.disabled = false;
+    showBatchWinners(batch);
+  }
+
+  // ---- Winner presentation ----
+  function showSingleWinner(e) {
+    modalLabel.textContent = "WINNER";
+    modalPrize.hidden = false;
+    modalList.hidden = true;
+    modalActions.hidden = false;
     modalPrize.textContent = e.name;
     modalPrize.style.textShadow = `0 0 20px ${e.color}, 0 0 44px ${e.color}88`;
+    resultValue.textContent = e.name;
     winModal._winnerId = e.id;
     winSound();
-    openModal();
+    openWinModal();
     flashEntry(e.id);
   }
 
-  // ---- Entries UI ----
+  function showBatchWinners(batch) {
+    if (batch.length === 0) return;
+    modalLabel.textContent = `WINNERS · ${batch.length}`;
+    modalPrize.hidden = true;
+    modalActions.hidden = false;
+    modalList.hidden = false;
+    modalList.innerHTML = "";
+    batch.forEach((w, i) => {
+      const li = document.createElement("li");
+      li.style.animationDelay = (i * 0.07) + "s";
+      li.innerHTML = `<span class="r">#${i + 1}</span><span class="swatch" style="background:${w.color};color:${w.color}"></span>${escapeHtml(w.name)}`;
+      modalList.appendChild(li);
+    });
+    resultValue.textContent = `${batch.length} winners drawn`;
+    winModal._winnerId = null;
+    winSound();
+    openWinModal();
+  }
+
+  // ---- Winners history ----
+  function recordWinner(e) {
+    winners.unshift({ name: e.name, color: e.color, time: Date.now() });
+    if (winners.length > 500) winners.length = 500;
+    renderWinners();
+    save();
+  }
+
+  function renderWinners() {
+    winBadge.textContent = winners.length;
+    winnersList.innerHTML = "";
+    if (winners.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "winners-empty";
+      empty.innerHTML = "No spins yet.<br>Winners will be logged here.";
+      winnersList.appendChild(empty);
+      return;
+    }
+    winners.forEach((w, i) => {
+      const item = document.createElement("div");
+      item.className = "winner-item";
+      const t = new Date(w.time);
+      const time = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      item.innerHTML =
+        `<span class="winner-rank">#${winners.length - i}</span>` +
+        `<span class="swatch" style="background:${w.color};color:${w.color}"></span>` +
+        `<span class="winner-name">${escapeHtml(w.name)}</span>` +
+        `<span class="winner-time">${time}</span>`;
+      winnersList.appendChild(item);
+    });
+  }
+
+  function exportWinners() {
+    if (winners.length === 0) { alert("No winners to export yet."); return; }
+    const rows = [["Rank", "Prize", "Timestamp"]];
+    winners.slice().reverse().forEach((w, i) => {
+      rows.push([i + 1, w.name, new Date(w.time).toISOString()]);
+    });
+    const csv = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+    downloadFile("prize-winners.csv", csv, "text/csv");
+    blip(700, 0.08, "square", 0.05);
+  }
+  function csvCell(v) {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+  function downloadFile(name, content, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ---- Entries ----
   function renderEntries() {
     entriesEl.classList.toggle("weighted", weighted);
     entriesEl.innerHTML = "";
-
     if (entries.length === 0) {
       const hint = document.createElement("div");
       hint.className = "empty-hint";
-      hint.innerHTML = "No prizes yet.<br>Add your first prize below to load the wheel.";
+      hint.innerHTML = "No prizes yet.<br>Add one below or use ⇪ IMPORT.";
       entriesEl.appendChild(hint);
     }
-
     const tw = totalWeight();
     entries.forEach((e) => {
       const row = document.createElement("div");
@@ -320,8 +469,7 @@
 
       const swatch = document.createElement("span");
       swatch.className = "swatch";
-      swatch.style.background = e.color;
-      swatch.style.color = e.color;
+      swatch.style.background = e.color; swatch.style.color = e.color;
       swatch.title = "Click to recolor";
       swatch.addEventListener("click", () => {
         const idx = PALETTE.indexOf(e.color);
@@ -332,16 +480,14 @@
 
       const name = document.createElement("input");
       name.className = "entry-name";
-      name.value = e.name;
-      name.maxLength = 42;
+      name.value = e.name; name.maxLength = 42;
       name.setAttribute("aria-label", "Prize name");
       name.addEventListener("input", () => { e.name = name.value; drawWheel(); });
       name.addEventListener("change", save);
 
       const weight = document.createElement("input");
       weight.className = "weight-input";
-      weight.type = "number";
-      weight.min = "1"; weight.step = "1";
+      weight.type = "number"; weight.min = "1"; weight.step = "1";
       weight.value = e.weight;
       weight.setAttribute("aria-label", "Weight");
       weight.addEventListener("input", () => {
@@ -352,20 +498,16 @@
 
       const pct = document.createElement("span");
       pct.className = "pct";
-      const share = (weighted ? Math.max(0.0001, e.weight) : 1) / tw;
-      pct.textContent = Math.round(share * 100) + "%";
+      pct.textContent = Math.round(((weighted ? Math.max(0.0001, e.weight) : 1) / tw) * 100) + "%";
 
       const del = document.createElement("button");
-      del.className = "del-btn";
-      del.innerHTML = "×";
-      del.title = "Remove";
+      del.className = "del-btn"; del.innerHTML = "×"; del.title = "Remove";
       del.setAttribute("aria-label", "Remove prize");
       del.addEventListener("click", () => removeEntry(e.id));
 
       row.append(swatch, name, weight, pct, del);
       entriesEl.appendChild(row);
     });
-
     updateMeta();
   }
 
@@ -374,60 +516,59 @@
     entriesEl.querySelectorAll(".entry").forEach((row) => {
       const e = entries.find((x) => x.id === row.dataset.id);
       if (!e) return;
-      const share = (weighted ? Math.max(0.0001, e.weight) : 1) / tw;
       const pct = row.querySelector(".pct");
-      if (pct) pct.textContent = Math.round(share * 100) + "%";
+      if (pct) pct.textContent = Math.round(((weighted ? Math.max(0.0001, e.weight) : 1) / tw) * 100) + "%";
     });
     save();
   }
 
   function updateMeta() {
     chipCount.textContent = entries.length + (entries.length === 1 ? " SLOT" : " SLOTS");
-    chipMode.textContent = weighted ? "WEIGHTED" : "EVEN ODDS";
+    const tags = [];
+    tags.push(weighted ? "WEIGHTED" : "EVEN ODDS");
+    if (elimination) tags.push("ELIM");
+    if (mystery) tags.push("MYSTERY");
+    chipMode.textContent = tags.join(" · ");
+    drawCountEl.textContent = drawCount;
+    drawBtnN.textContent = drawCount;
+    drawManyBtn.lastChild.textContent = drawCount === 1 ? " WINNER" : " WINNERS";
   }
 
   function addEntry(name) {
     const clean = name.trim();
     if (!clean) return;
-    entries.push({ id: uid(), name: clean, weight: 1, color: pickColor() });
-    renderEntries();
-    drawWheel();
-    save();
+    entries.push({ id: uid(), name: clean.slice(0, 42), weight: 1, color: pickColor() });
+    renderEntries(); drawWheel(); save();
     blip(660, 0.05, "square", 0.04);
   }
 
   function removeEntry(id) {
     const row = entriesEl.querySelector(`.entry[data-id="${id}"]`);
-    const finish = () => {
-      entries = entries.filter((e) => e.id !== id);
-      renderEntries(); drawWheel(); save();
-    };
-    if (row) {
-      row.classList.add("leaving");
-      setTimeout(finish, 220);
-    } else finish();
+    const finish = () => { entries = entries.filter((e) => e.id !== id); renderEntries(); drawWheel(); save(); };
+    if (row) { row.classList.add("leaving"); setTimeout(finish, 220); } else finish();
     blip(320, 0.06, "sawtooth", 0.03);
+  }
+  function removeEntryImmediate(id) {
+    entries = entries.filter((e) => e.id !== id);
+    renderEntries(); drawWheel(); save();
   }
 
   function flashEntry(id) {
     const row = entriesEl.querySelector(`.entry[data-id="${id}"]`);
-    if (row) {
-      row.classList.remove("winner-flash");
-      void row.offsetWidth;
-      row.classList.add("winner-flash");
-    }
+    if (row) { row.classList.remove("winner-flash"); void row.offsetWidth; row.classList.add("winner-flash"); }
   }
 
   // ---- Modal ----
-  function openModal() { winModal.classList.add("open"); winModal.setAttribute("aria-hidden", "false"); startConfetti(); }
-  function winModalClose() {
+  function openWinModal() { winModal.classList.add("open"); winModal.setAttribute("aria-hidden", "false"); startConfetti(); }
+  function closeWinModal(silent) {
+    if (!silent) clearAutospin();
     winModal.classList.remove("open");
     winModal.setAttribute("aria-hidden", "true");
     stopConfetti();
   }
 
   // ---- Confetti ----
-  const confettiCanvas = document.getElementById("confetti");
+  const confettiCanvas = $("confetti");
   const cctx = confettiCanvas.getContext("2d");
   let confParticles = [];
   let confRAF = null;
@@ -436,8 +577,7 @@
     confettiCanvas.width = confettiCanvas.clientWidth * dpr;
     confettiCanvas.height = confettiCanvas.clientHeight * dpr;
     confParticles = [];
-    const count = 160;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < 170; i++) {
       confParticles.push({
         x: Math.random() * confettiCanvas.width,
         y: -Math.random() * confettiCanvas.height * 0.5,
@@ -461,83 +601,158 @@
       if (p.y < confettiCanvas.height + 40) alive++;
       cctx.save();
       cctx.translate(p.x, p.y); cctx.rotate(p.rot);
-      cctx.fillStyle = p.color;
-      cctx.globalAlpha = 0.9;
+      cctx.fillStyle = p.color; cctx.globalAlpha = 0.9;
       if (p.shape === "rect") cctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
       else { cctx.beginPath(); cctx.arc(0, 0, p.size / 2, 0, TAU); cctx.fill(); }
       cctx.restore();
     }
-    if (alive > 0 && winModal.classList.contains("open")) {
-      confRAF = requestAnimationFrame(confLoop);
-    } else {
-      cctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
-    }
+    if (alive > 0 && winModal.classList.contains("open")) confRAF = requestAnimationFrame(confLoop);
+    else cctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
   }
   function stopConfetti() { if (confRAF) cancelAnimationFrame(confRAF); confRAF = null; }
+
+  // ---- Import ----
+  function parseImport(text) {
+    const out = [];
+    text.split(/\r?\n/).forEach((line) => {
+      const raw = line.trim();
+      if (!raw) return;
+      const parts = raw.split(",");
+      let name = raw, weight = 1;
+      if (parts.length > 1) {
+        const last = parts[parts.length - 1].trim();
+        if (last !== "" && !isNaN(Number(last))) {
+          weight = clamp(Number(last), 0.1, 9999);
+          name = parts.slice(0, -1).join(",").trim();
+        }
+      }
+      name = name.trim().slice(0, 42);
+      if (name) out.push({ name, weight });
+    });
+    return out;
+  }
+
+  function refreshImportCount() {
+    const n = parseImport(importText.value).length;
+    importCount.textContent = n ? `${n} prize${n === 1 ? "" : "s"} detected` : "";
+  }
+
+  function openImport() {
+    importModal.classList.add("open");
+    importModal.setAttribute("aria-hidden", "false");
+    refreshImportCount();
+    setTimeout(() => importText.focus(), 60);
+  }
+  function closeImport() { importModal.classList.remove("open"); importModal.setAttribute("aria-hidden", "true"); }
+
+  function doImport() {
+    const parsed = parseImport(importText.value);
+    if (parsed.length === 0) { alert("Nothing to import — add at least one line."); return; }
+    const mode = document.querySelector('input[name="importMode"]:checked').value;
+    if (mode === "replace") entries = [];
+    parsed.forEach((p) => entries.push({ id: uid(), name: p.name, weight: p.weight, color: pickColor() }));
+    // auto-enable weighted odds if any imported weight differs
+    if (parsed.some((p) => p.weight !== 1)) { weighted = true; weightToggle.checked = true; }
+    renderEntries(); drawWheel(); save();
+    closeImport();
+    switchTab("roster");
+    blip(720, 0.08, "square", 0.05);
+  }
+
+  // ---- Tabs ----
+  function switchTab(name) {
+    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+    document.querySelectorAll(".pane").forEach((p) => { p.hidden = p.dataset.pane !== name; });
+  }
+
+  // ---- Helpers ----
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
 
   // ---- Events ----
   spinBtn.addEventListener("click", spin);
 
-  addForm.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    addEntry(addInput.value);
-    addInput.value = "";
-    addInput.focus();
-  });
+  addForm.addEventListener("submit", (ev) => { ev.preventDefault(); addEntry(addInput.value); addInput.value = ""; addInput.focus(); });
 
   weightToggle.addEventListener("change", () => {
-    weighted = weightToggle.checked;
-    renderEntries(); drawWheel(); save();
+    weighted = weightToggle.checked; renderEntries(); drawWheel(); save();
     blip(weighted ? 740 : 500, 0.06, "square", 0.04);
   });
 
   shuffleBtn.addEventListener("click", () => {
-    for (let i = entries.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [entries[i], entries[j]] = [entries[j], entries[i]];
-    }
-    renderEntries(); drawWheel(); save();
-    blip(600, 0.06, "square", 0.04);
+    for (let i = entries.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [entries[i], entries[j]] = [entries[j], entries[i]]; }
+    renderEntries(); drawWheel(); save(); blip(600, 0.06, "square", 0.04);
   });
 
   clearBtn.addEventListener("click", () => {
     if (entries.length === 0) return;
     if (!confirm("Remove all prizes from the wheel?")) return;
-    entries = [];
-    renderEntries(); drawWheel(); save();
+    entries = []; renderEntries(); drawWheel(); save();
     resultValue.textContent = "Insert prizes to begin";
   });
 
-  soundBtn.addEventListener("click", () => {
-    soundOn = !soundOn;
-    soundBtn.textContent = soundOn ? "🔊 SFX ON" : "🔇 SFX OFF";
-    soundBtn.setAttribute("aria-pressed", String(soundOn));
-    save();
-    if (soundOn) blip(700, 0.08, "square", 0.05);
+  importBtn.addEventListener("click", openImport);
+  importText.addEventListener("input", refreshImportCount);
+  importFile.addEventListener("change", () => {
+    const f = importFile.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { importText.value = String(reader.result || ""); refreshImportCount(); };
+    reader.readAsText(f);
+  });
+  importConfirm.addEventListener("click", doImport);
+  importCancel.addEventListener("click", closeImport);
+  importClose.addEventListener("click", closeImport);
+  importModal.addEventListener("click", (e) => { if (e.target === importModal) closeImport(); });
+
+  // Mode toggles
+  eliminationToggle.addEventListener("change", () => { elimination = eliminationToggle.checked; updateMeta(); save(); blip(620, 0.06, "square", 0.04); });
+  mysteryToggle.addEventListener("change", () => { mystery = mysteryToggle.checked; drawWheel(); updateMeta(); save(); blip(mystery ? 400 : 700, 0.07, "sawtooth", 0.04); });
+  autospinToggle.addEventListener("change", () => { autospin = autospinToggle.checked; if (!autospin) clearAutospin(); save(); blip(680, 0.06, "square", 0.04); });
+  soundToggle.addEventListener("change", () => { sound = soundToggle.checked; save(); if (sound) blip(700, 0.08, "square", 0.05); });
+
+  speedSeg.addEventListener("click", (e) => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    speed = btn.dataset.speed;
+    speedSeg.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+    save(); blip(660, 0.05, "square", 0.04);
   });
 
-  againBtn.addEventListener("click", () => { winModalClose(); setTimeout(spin, 220); });
-  removeWinnerBtn.addEventListener("click", () => {
-    const id = winModal._winnerId;
-    winModalClose();
-    if (id) removeEntry(id);
-    setTimeout(() => { if (entries.length > 0) spin(); }, 320);
+  drawMinus.addEventListener("click", () => { drawCount = clamp(drawCount - 1, 1, 20); updateMeta(); save(); });
+  drawPlus.addEventListener("click", () => { drawCount = clamp(drawCount + 1, 1, 20); updateMeta(); save(); });
+  drawManyBtn.addEventListener("click", drawMany);
+
+  exportWinnersBtn.addEventListener("click", exportWinners);
+  clearWinnersBtn.addEventListener("click", () => {
+    if (winners.length === 0) return;
+    if (!confirm("Clear the winners history?")) return;
+    winners = []; renderWinners(); save();
   });
-  closeModalBtn.addEventListener("click", winModalClose);
-  winModal.addEventListener("click", (e) => { if (e.target === winModal) winModalClose(); });
+
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+
+  againBtn.addEventListener("click", () => { clearAutospin(); closeWinModal(true); setTimeout(spin, 200); });
+  removeWinnerBtn.addEventListener("click", () => {
+    clearAutospin();
+    const id = winModal._winnerId;
+    closeWinModal(true);
+    if (id) removeEntryImmediate(id);
+    setTimeout(() => { if (entries.length > 0) spin(); }, 260);
+  });
+  closeModalBtn.addEventListener("click", () => closeWinModal(false));
+  winModal.addEventListener("click", (e) => { if (e.target === winModal) closeWinModal(false); });
 
   document.addEventListener("keydown", (e) => {
-    if (e.code === "Space" && document.activeElement.tagName !== "INPUT" && !winModal.classList.contains("open")) {
+    const typing = /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+    if (e.code === "Space" && !typing && !winModal.classList.contains("open") && !importModal.classList.contains("open")) {
       e.preventDefault(); spin();
     }
-    if (e.key === "Escape") winModalClose();
+    if (e.key === "Escape") { closeWinModal(false); closeImport(); }
   });
 
   let resizeTO = null;
-  window.addEventListener("resize", () => {
-    clearTimeout(resizeTO);
-    resizeTO = setTimeout(resizeCanvas, 100);
-  });
+  window.addEventListener("resize", () => { clearTimeout(resizeTO); resizeTO = setTimeout(resizeCanvas, 100); });
 
   // ---- Init ----
   function init() {
@@ -546,15 +761,16 @@
         .map((name, i) => ({ id: uid(), name, weight: 1, color: PALETTE[i % PALETTE.length] }));
     }
     weightToggle.checked = weighted;
-    soundBtn.textContent = soundOn ? "🔊 SFX ON" : "🔇 SFX OFF";
-    soundBtn.setAttribute("aria-pressed", String(soundOn));
+    eliminationToggle.checked = elimination;
+    mysteryToggle.checked = mystery;
+    autospinToggle.checked = autospin;
+    soundToggle.checked = sound;
+    speedSeg.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.speed === speed));
     renderEntries();
+    renderWinners();
     resizeCanvas();
   }
 
-  // Wait for fonts so labels render crisp, but don't block forever.
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(drawWheel);
-  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawWheel);
   init();
 })();
