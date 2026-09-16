@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a1f" />
+  <title>PRIZE ARCADE — Spinner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Ambient background layers -->
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-coin" aria-hidden="true">◉</span>
+      <h1 class="brand-title" data-text="PRIZE ARCADE">PRIZE ARCADE</h1>
+    </div>
+    <div class="topbar-meta">
+      <span class="chip" id="chipCount">0 SLOTS</span>
+      <span class="chip chip-alt" id="chipMode">EVEN ODDS</span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <!-- WHEEL -->
+    <section class="wheel-zone" aria-label="Prize wheel">
+      <div class="wheel-frame">
+        <div class="pointer" id="pointer" aria-hidden="true">
+          <svg viewBox="0 0 60 80" width="60" height="80">
+            <polygon points="30,78 4,10 56,10" />
+          </svg>
+        </div>
+        <div class="wheel-holder" id="wheelHolder">
+          <canvas id="wheel" width="720" height="720"></canvas>
+          <button class="hub" id="spinBtn" type="button" aria-label="Spin the wheel">
+            <span class="hub-ring"></span>
+            <span class="hub-label" id="hubLabel">SPIN</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="result-banner" id="resultBanner" aria-live="polite">
+        <span class="result-tag">READY PLAYER ONE</span>
+        <span class="result-value" id="resultValue">Insert prizes to begin</span>
+      </div>
+    </section>
+
+    <!-- CONTROL PANEL -->
+    <aside class="panel" aria-label="Prize controls">
+      <div class="panel-head">
+        <h2>PRIZE ROSTER</h2>
+        <div class="panel-tools">
+          <button class="mini-btn" id="shuffleBtn" title="Shuffle order">⤮ SHUFFLE</button>
+          <button class="mini-btn danger" id="clearBtn" title="Remove all">✕ CLEAR</button>
+        </div>
+      </div>
+
+      <label class="weight-toggle">
+        <input type="checkbox" id="weightToggle" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-text">WEIGHTED ODDS</span>
+        <span class="toggle-hint">off = auto even split</span>
+      </label>
+
+      <div class="entries" id="entries" role="list"></div>
+
+      <form class="add-row" id="addForm" autocomplete="off">
+        <input type="text" id="addInput" maxlength="42" placeholder="Add a prize…" aria-label="New prize name" />
+        <button type="submit" class="add-btn" aria-label="Add prize">＋</button>
+      </form>
+
+      <div class="panel-foot">
+        <button class="ghost-btn" id="soundBtn" aria-pressed="true">🔊 SFX ON</button>
+        <span class="foot-hint">Enter to add · Space to spin</span>
+      </div>
+    </aside>
+  </main>
+
+  <!-- WINNER MODAL -->
+  <div class="modal" id="winModal" role="dialog" aria-modal="true" aria-hidden="true">
+    <canvas class="confetti" id="confetti"></canvas>
+    <div class="modal-card">
+      <div class="modal-crown">🏆</div>
+      <div class="modal-label">WINNER</div>
+      <div class="modal-prize" id="modalPrize">—</div>
+      <div class="modal-actions">
+        <button class="neon-btn" id="againBtn">SPIN AGAIN</button>
+        <button class="neon-btn ghost" id="removeWinnerBtn">REMOVE &amp; SPIN</button>
+        <button class="neon-btn ghost" id="closeModalBtn">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
