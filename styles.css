@@ -361,6 +361,7 @@ body {
   box-shadow: 0 30px 90px rgba(0,0,0,0.6), 0 0 60px rgba(164,92,255,0.35);
   animation: cardPop 0.55s var(--ease-pop);
   max-width: 92vw;
+  max-height: 92vh; overflow-y: auto;
 }
 @keyframes cardPop { from { transform: scale(0.7) translateY(30px); opacity: 0; } }
 .modal-crown { font-size: 56px; filter: drop-shadow(0 0 18px var(--neon-yellow)); animation: crownBob 2s ease-in-out infinite; }
@@ -511,6 +512,60 @@ body {
   animation: entryIn 0.35s var(--ease-pop) both;
 }
 .modal-list li .r { font-family: var(--font-arcade); font-size: 12px; color: var(--neon-yellow); }
+
+/* --- Tablet / stacked layout --- */
+@media (max-width: 940px) {
+  .wheel-frame { width: min(80vw, 560px); }
+  /* Keep lists usably scrollable so the add / import controls stay reachable. */
+  .entries, .winners-list { max-height: 42vh; }
+}
+
+/* --- Phones --- */
+@media (max-width: 600px) {
+  .topbar { flex-wrap: wrap; gap: 10px 14px; padding: 16px 16px 4px; }
+  .brand { gap: 10px; min-width: 0; }
+  .brand-coin { font-size: 22px; }
+  .brand-title { font-size: 12px; letter-spacing: 1px; line-height: 1.55; overflow-wrap: anywhere; }
+  .brand-title::before { display: none; } /* drop glitch layer to avoid overflow on tiny screens */
+  .topbar-meta { width: 100%; }
+  .chip { font-size: 10px; padding: 6px 10px; }
+
+  .stage { padding: 14px 14px 32px; gap: 18px; }
+  .wheel-zone { gap: 16px; }
+  .wheel-frame { width: min(90vw, 440px); }
+  .hub { min-width: 84px; min-height: 84px; }
+  .result-banner { min-width: 0; width: 100%; padding: 10px 16px; }
+
+  .panel { padding: 14px; border-radius: 14px; gap: 12px; }
+  .tabs { gap: 4px; padding: 4px; }
+  .tab { font-size: 9px; letter-spacing: 0; padding: 10px 2px; gap: 3px; }
+  .panel-tools { flex-wrap: wrap; }
+  .entries, .winners-list { max-height: 48vh; }
+
+  .mode-name { font-size: 13px; }
+  .mode-desc { font-size: 12px; }
+  .segmented button { font-size: 11px; padding: 10px 2px; }
+  .stepper button { width: 34px; height: 34px; } /* larger touch target */
+
+  .modal { padding: 14px; }
+  .modal-card { padding: 26px 20px; }
+  .modal-crown { font-size: 46px; }
+  .modal-prize { font-size: clamp(26px, 8vw, 40px); }
+  .neon-btn { flex: 1 1 auto; }
+  .import-card { padding: 20px; }
+}
+
+/* --- Very small phones --- */
+@media (max-width: 380px) {
+  .brand-title { font-size: 10px; }
+  .tab { font-size: 8px; }
+  .mini-btn { font-size: 10px; padding: 6px 7px; }
+}
+
+/* --- Short landscape: let the whole page scroll rather than clip --- */
+@media (max-height: 560px) and (max-width: 940px) {
+  .wheel-frame { width: min(62vh, 90vw); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; }
